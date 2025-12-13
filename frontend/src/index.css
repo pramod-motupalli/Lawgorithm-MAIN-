@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  /* AP Police Theme Colors */
+  /* Backgrounds - Khaki Shades */
+  --color-police-50: #fefdfa;
+  --color-police-100: #f4f0e6;
+  /* Light Khaki */
+  --color-police-200: #e8dec3;
+
+  /* Mid-tones - Transition */
+  --color-police-300: #dccba0;
+  --color-police-400: #d0b87d;
+
+  /* Primary/Text/Actions - Navy Blue Shades */
+  --color-police-500: #3b5998;
+  --color-police-600: #284278;
+  /* Primary Button */
+  --color-police-700: #1a3c6e;
+  /* Header Background */
+  --color-police-800: #122849;
+  --color-police-900: #0a1629;
+}
+
+@layer utilities {
+  .legal-paper {
+    background-image: radial-gradient(#9ca3af 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-color: #fff;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Global Styles */
+body {
+  background-color: var(--color-police-100);
+  color: var(--color-gray-900);
+  font-family: var(--font-sans);
+}
