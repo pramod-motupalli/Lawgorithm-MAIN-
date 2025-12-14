@@ -44,6 +44,9 @@ async def generate_fir(request: FIRRequest):
         
         # New Official Info
         official_info = f"""
+        Police Station: {request.police_station}
+        FIR Number: {request.fir_number}
+        Registration Date: {request.registration_date}
         Investigating Officer: {request.officer_name} ({request.officer_rank})
         """
         
@@ -107,7 +110,9 @@ FIRST INFORMATION REPORT (FIR)
 
 7. Sections of Law Applied:
    - IPC Section <number> – <title>
-   (Briefly explain why this section applies based on the facts)
+   - IPC Section <number> – <title>
+   - IPC Section <number> – <title>
+   (Briefly explain why these sections apply based on the facts. YOU MUST INCLUDE AT LEAST 3 DISTINCT RELEVANT SECTIONS. If the case is simple, consider related offenses like attempt, abetment, or common intention to reach 3 sections.)
 
 8. Facts of the Case:
    (Formally narrate the incident in third-person legal language using phrases like

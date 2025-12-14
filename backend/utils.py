@@ -86,6 +86,12 @@ def get_relevant_sections(case_description, limit=15):
                 if phrase in title_text:
                     section_score += 10
             
+            # 4. Section Number Boost (Critical: 50 points)
+            # If the LLM explicitly mentioned "Section 379", ensuring we prioritize Section 379
+            # check if the item's section number is present in the search query tokens
+            if str(item['Section']).lower() in case_keywords:
+                 section_score += 50
+            
             if section_score > 0:
                 # Format: "Section X: Title - Desc"
                 # Truncate description intelligently to save tokens but keep context

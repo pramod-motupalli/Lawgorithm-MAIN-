@@ -58,9 +58,9 @@ function App() {
               Police <span className="text-[#d32f2f]">DraftAssist</span>
             </h1>
           </div>
-          <div className="text-sm font-medium text-[#1a3c6e] hidden sm:block">
+          {/* <div className="text-sm font-medium text-[#1a3c6e] hidden sm:block">
             AI-Powered Legal Documentation
-          </div>
+          </div> */}
         </div>
       </header>
 
