@@ -1,8 +1,8 @@
-# Police DraftAssist - Backend API
+# Lawgorithm - Backend API
 
 ## Overview
 
-This is the backend service for the **Police DraftAssist** application. It provides a RESTful API to generate legally structured First Information Reports (FIRs) using AI.
+This is the backend service for the **Lawgorithm** application. It provides a RESTful API to generate legally structured First Information Reports (FIRs) using AI.
 
 It is built with **FastAPI** and integrates with **Groq (Llama 3.3 70B)** for text generation.
 

@@ -1,7 +1,7 @@
-# Police DraftAssist - Frontend UI
+# Lawgorithm - Frontend UI
 
 ## Overview
-This is the frontend user interface for the **Police DraftAssist** application. It is a modern, responsive web application designed with a professional "Legal/Official" aesthetic to assist officers in drafting FIRs.
+This is the frontend user interface for the **Lawgorithm** application. It is a modern, responsive web application designed with a professional "Legal/Official" aesthetic to assist officers in drafting FIRs.
 
 It is built with **React**, **Vite**, and **Tailwind CSS (v4)**.
 
