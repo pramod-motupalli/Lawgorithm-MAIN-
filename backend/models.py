@@ -22,3 +22,25 @@ class FIRRequest(BaseModel):
     registration_date: Optional[str] = "Not provided"
     officer_name: Optional[str] = "Not provided"
     officer_rank: Optional[str] = "Not provided"
+    officer_rank: Optional[str] = "Not provided"
+
+class QuestionnaireRequest(BaseModel):
+    fir_content: str
+    case_description: str
+    case_description: str
+
+class ChargeSheetRequest(BaseModel):
+    fir_content: str
+    case_description: str
+    plaintiff_answers: dict
+    defendant_answers: dict
+    investigation_summary: str = ""
+    officer_name: str
+    officer_rank: str
+    police_station: str
+    police_station: str
+
+class VerdictRequest(BaseModel):
+    charge_sheet_content: str
+    case_description: str
+    case_description: str

@@ -2,32 +2,74 @@ import json
 import os
 import re
 
-# Global cache for IPC data
-IPC_DATA = []
+# Global cache for Law data
+LAWS_DATA = []
 
-def load_ipc_data():
+def load_all_laws():
     """
-    Loads IPC JSON data into memory on startup.
+    Loads all JSON law data from the 'laws_json' directory into memory on startup.
+    Normalizes schema to have 'act', 'section', 'title', 'description'.
     """
-    global IPC_DATA
+    global LAWS_DATA
+    LAWS_DATA = [] # Reset
+    
+    laws_dir = os.path.join(os.path.dirname(__file__), "laws_json")
+    if not os.path.exists(laws_dir):
+        print(f"Warning: Directory {laws_dir} not found.")
+        return
+
     try:
-        json_path = os.path.join("laws_json", "ipc.json")
-        if not os.path.exists(json_path):
-            print(f"Warning: {json_path} not found.")
-            return
+        # Iterate over all json files
+        for filename in os.listdir(laws_dir):
+            if not filename.lower().endswith(".json"):
+                continue
+                
+            filepath = os.path.join(laws_dir, filename)
+            act_name = os.path.splitext(filename)[0].upper() # e.g., 'ipc.json' -> 'IPC'
+            
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    
+                    # Normalize and add to global list
+                    count = 0
+                    for item in data:
+                        # Handle varied schema keys
+                        # Section number
+                        section = item.get("Section") or item.get("section")
+                        if not section: continue
+                        
+                        # Title
+                        title = item.get("section_title") or item.get("title") or ""
+                        
+                        # Description
+                        desc = item.get("section_desc") or item.get("description") or ""
+                        
+                        normalized_entry = {
+                            "act": act_name,
+                            "section": str(section),
+                            "title": title,
+                            "description": desc
+                        }
+                        LAWS_DATA.append(normalized_entry)
+                        count += 1
+                        
+                    print(f"Loaded {count} sections from {act_name}")
+                    
+            except Exception as e:
+                print(f"Error loading {filename}: {e}")
+                
+        print(f"Total Laws Loaded: {len(LAWS_DATA)} sections across all acts.")
 
-        with open(json_path, "r", encoding="utf-8") as f:
-            IPC_DATA = json.load(f)
-        print(f"IPC Data loaded: {len(IPC_DATA)} sections.")
     except Exception as e:
-        print(f"Error loading IPC data: {e}")
+        print(f"Error scanning laws directory: {e}")
 
 def get_relevant_sections(case_description, limit=15):
     """
-    Scans the loaded IPC data and returns the most relevant sections 
+    Scans ALL loaded Law data and returns the most relevant sections 
     based on weighted keyword matching (Title > Description).
     """
-    if not IPC_DATA:
+    if not LAWS_DATA:
         return ""
 
     try:
@@ -55,15 +97,13 @@ def get_relevant_sections(case_description, limit=15):
 
         scored_sections = []
 
-        for item in IPC_DATA:
-            if "Section" not in item or "section_title" not in item:
-                continue
-            
+        for item in LAWS_DATA:
             section_score = 0
             
             # extract fields
-            title_text = str(item.get("section_title", "")).lower()
-            desc_text = str(item.get("section_desc", "")).lower()
+            title_text = str(item.get("title", "")).lower()
+            desc_text = str(item.get("description", "")).lower()
+            act_text = str(item.get("act", "")).lower()
             
             # Tokenize targets
             title_tokens = set(tokenizer.findall(title_text))
@@ -80,25 +120,25 @@ def get_relevant_sections(case_description, limit=15):
             section_score += len(desc_matches) * 1
             
             # 3. Exact Phrase Boost (Bonus: 10 points)
-            # Check if any 2-word sequence from case exists in title (Basic phrase matching)
             for i in range(len(case_tokens) - 1):
                 phrase = f"{case_tokens[i]} {case_tokens[i+1]}"
                 if phrase in title_text:
                     section_score += 10
             
             # 4. Section Number Boost (Critical: 50 points)
-            # If the LLM explicitly mentioned "Section 379", ensuring we prioritize Section 379
-            # check if the item's section number is present in the search query tokens
-            if str(item['Section']).lower() in case_keywords:
+            if str(item['section']).lower() in case_keywords:
                  section_score += 50
             
+            # 5. Act Name Match (Moderate: 20 points) - e.g. if user says "MVA" or "Motor Vehicle"
+            if act_text in case_tokens: # simple match 'ipc' in ['ipc', '302']
+                section_score += 20
+            
             if section_score > 0:
-                # Format: "Section X: Title - Desc"
-                # Truncate description intelligently to save tokens but keep context
-                full_desc = item.get('section_desc', '')
+                # Format: "[ACT] Section X: Title - Desc"
+                full_desc = item.get('description', '')
                 truncated_desc = (full_desc[:400] + '...') if len(full_desc) > 400 else full_desc
                 
-                entry = f"IPC Section {item['Section']}: {item['section_title']}\n{truncated_desc}"
+                entry = f"[{item['act']}] Section {item['section']}: {item['title']}\n{truncated_desc}"
                 scored_sections.append((section_score, entry))
 
         # Sort by score desc
