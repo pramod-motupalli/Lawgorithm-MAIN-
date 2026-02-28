@@ -5,17 +5,11 @@ import os
 from dotenv import load_dotenv
 import json
 from groq import Groq
-from models import (
-    FIRRequest,
-    QuestionnaireRequest,
-    ChargeSheetRequest,
-    VerdictRequest,
-    FairnessRequest,
-)
+from models import *
 
 load_dotenv()
 
-app = FastAPI(title="FIR Generator API")
+app = FastAPI(title="Lawgorithm API")
 
 # CORS setup
 app.add_middleware(
@@ -106,10 +100,6 @@ async def generate_fir(request: FIRRequest):
         search_query = f"{request.case_description} {legal_keywords}"
         relevant_laws_raw = get_relevant_sections(search_query, limit=5)
         print(f"Initial Context injected: {len(relevant_laws_raw)} chars")
-        print(
-            f"\n--- [RAG] INITIAL FETCHED LAWS ---\n{relevant_laws_raw}\n----------------------------------"
-        )
-
         # --- STEP 3: VERIFICATION / RELEVANCE FILTERING ---
         verification_prompt = f"""
         You are a strict Legal Assessor and Expert.
@@ -137,10 +127,6 @@ async def generate_fir(request: FIRRequest):
 
         relevant_laws = verification_completion.choices[0].message.content
         print(f"Verified Context injected: {len(relevant_laws)} chars")
-        print(
-            f"\n--- [RAG] VERIFIED LAWS FILTERED ---\n{relevant_laws}\n------------------------------------"
-        )
-
         system_prompt = f"""You are an expert Indian Police Officer and Legal Drafting Assistant with deep knowledge of the Indian Penal Code (IPC), CrPC, Motor Vehicles Act (MVA), and other standard Indian Laws.
 
 Your task is to convert informal user-provided case details into a legally structured First Information Report (FIR).
@@ -368,8 +354,6 @@ async def predict_verdict(request: VerdictRequest):
     try:
         # 1. Fetch historical cases related to this case
         historical_cases_raw = get_relevant_cases(request.case_description, limit=5)
-        print(f"\n[RAG] Initial Historical Cases fetched.")
-
         # 2. Add an agentic verification step to ensure they are genuinely relevant
         verification_prompt = f"""
         You are a highly analytical Legal Assessor.
@@ -393,13 +377,6 @@ async def predict_verdict(request: VerdictRequest):
         )
 
         historical_cases_context = verification_completion.choices[0].message.content
-        print(
-            f"[RAG] Verified Historical Cases injected: {len(historical_cases_context)} characters"
-        )
-        print(
-            f"\n--- [RAG] FILTERED VERIFIED PRECEDENTS ---\n{historical_cases_context}\n--------------------------------------"
-        )
-
         system_prompt = f"""You are a highly experienced Indian Judge.
         
         Your task is to review the Charge Sheet and Case Description and predict the most likely legal verdict based on the Indian Penal Code (IPC) and CrPC.
@@ -453,28 +430,34 @@ async def predict_verdict(request: VerdictRequest):
 
 @app.get("/")
 def read_root():
-    return {"message": "FIR Generator API is running"}
+    return {"message": "Lawgorithm API is running"}
 
 
 @app.post("/api/analyze_fairness")
 async def analyze_fairness(request: FairnessRequest):
     try:
         system_prompt = """You are a highly objective Judicial Auditor focused on ensuring fair, unbiased legal outcomes.
-        
-        Your task is to analyze the provided Case Description, Charge Sheet, and the initial Predicted Verdict.
-        Determine if the proceedings and the predicted verdict are completely fair and logically sound.
-        
-        CRITICAL RULE FOR EFFICIENCY: You should default to labeling the verdict as "Fair" in most cases. Minor discrepancies, small formatting issues, or slight logical assumptions should be noted in your explanation but MUST NOT cause the label to be "Needs Review".
-        ONLY use "Unfair" or "Needs Review" if there is blatant demographic bias, glaring logical hallucinations, extreme severity mismatches, or undeniable evidence that the verdict directly contradicts the facts.
-        
-        Output format must be valid JSON:
-        {
-            "overall_label": "Fair" or "Unfair" or "Needs Review",
-            "explanation": "Provide a quick, concise explanation on why you chose this label based on the evidence."
-        }
-        
-        IMPORTANT: Generate the output strictly in English.
-        """
+
+Your task is to evaluate the provided Case Description, Charge Sheet, and Predicted Verdict to determine if the proceedings align with standard legal and ethical practices.
+
+Guiding Principles for Evaluation:
+The legal system relies on reasonable alignment between facts and charges. Approach every case with a baseline presumption of procedural fairness. A case should be deemed "Fair" as long as the verdict is logically connected to the charges applied, acknowledging that stylistic differences in drafting or minor informational gaps are normal in legal documentation and do not constitute prejudice.
+
+You should reserve the "Needs Review" or "Unfair" classifications exclusively for instances where the documentation demonstrates:
+- Clearly stated demographic prejudice (e.g., bias related to caste, religion, gender, or race).
+- A severe disproportion between the offense and the penalty (e.g., recommending maximum statutory punishments for trivial infractions).
+- Fundamental contradictions where the accused is penalized despite facts explicitly precluding their involvement.
+
+In all other scenarios, including instances where you might simply recommend minor improvements or note formatting issues, the case should be validated as "Fair".
+
+Output format must be valid JSON:
+{
+    "overall_label": "Fair" or "Unfair" or "Needs Review",
+    "explanation": "Provide a concise, professional explanation supporting the selected label, referencing material evidence only."
+}
+
+Please ensure your analysis is generated strictly in English.
+"""
 
         user_content = f"""
         Case Description: {request.case_description}

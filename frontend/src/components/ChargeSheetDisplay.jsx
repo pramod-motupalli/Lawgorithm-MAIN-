@@ -12,46 +12,90 @@ const ChargeSheetDisplay = ({
 
     if (!chargeSheetText) return null;
 
-    const generatePDF = async (action = "download") => {
-        if (!contentRef.current) return;
-
+    const generatePDF = (action = "download") => {
         try {
-            const element = contentRef.current;
-
-            const canvas = await html2canvas(element, {
-                scale: 2,
-                useCORS: true,
-                logging: false,
-                backgroundColor: "#ffffff",
-            });
-
-            const imgData = canvas.toDataURL("image/png");
             const pdf = new jsPDF("p", "mm", "a4");
-
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            const imgWidth = pdfWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft >= 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-                heightLeft -= pdfHeight;
-            }
 
             const safeFir = (firNumber || "Draft").replace(
                 /[^a-z0-9\-_]/gi,
                 "_",
             );
             const filename = `ChargeSheet_${safeFir}.pdf`;
+
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(14);
+            pdf.text(
+                "FINAL REPORT UNDER SECTION 173 CrPC (CHARGE SHEET)",
+                105,
+                20,
+                { align: "center" },
+            );
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+
+            let y = 35;
+            const lines = chargeSheetText.split("\n");
+
+            for (let i = 0; i < lines.length; i++) {
+                if (y > 280) {
+                    pdf.addPage();
+                    y = 20;
+                }
+
+                let line = lines[i].trim();
+
+                if (!line) {
+                    y += 4;
+                    continue;
+                }
+
+                if (line.startsWith("#")) {
+                    pdf.setFont("helvetica", "bold");
+                    pdf.setFontSize(12);
+                    pdf.text(line.replace(/^#+\s*/, "").toUpperCase(), 15, y);
+                    pdf.setFont("helvetica", "normal");
+                    pdf.setFontSize(11);
+                    y += 8;
+                } else if (line.startsWith("- ")) {
+                    pdf.text(
+                        "• " + line.substring(2).replace(/\*\*/g, ""),
+                        20,
+                        y,
+                    );
+                    y += 6;
+                } else {
+                    const cleanLine = line.replace(/\*\*/g, ""); // Strip markdown bold logic for simple text rendering
+                    const splitLines = pdf.splitTextToSize(cleanLine, 180);
+                    for (let j = 0; j < splitLines.length; j++) {
+                        if (y > 280) {
+                            pdf.addPage();
+                            y = 20;
+                        }
+                        pdf.text(splitLines[j], 15, y);
+                        y += 6;
+                    }
+                }
+            }
+
+            // Signature block
+            if (y > 250) {
+                pdf.addPage();
+                y = 20;
+            }
+            pdf.setFont("helvetica", "normal");
+            pdf.text("Date: _________________", 15, y + 15);
+            pdf.text("Place: _________________", 15, y + 22);
+
+            pdf.setFont("helvetica", "bold");
+            pdf.text("Signature of Officer In-Charge", 195, y + 15, {
+                align: "right",
+            });
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(9);
+            pdf.text("(Name, Rank & Designation)", 195, y + 22, {
+                align: "right",
+            });
 
             if (action === "download") {
                 pdf.save(filename);

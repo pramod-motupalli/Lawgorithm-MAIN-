@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Send, FileText, MapPin, User, ShieldAlert } from "lucide-react";
+import { Send, FileText, MapPin, User, ShieldAlert, Mic } from "lucide-react";
 
 const FIRForm = ({ onSubmit, loading }) => {
     const [formData, setFormData] = useState({
@@ -18,6 +18,46 @@ const FIRForm = ({ onSubmit, loading }) => {
         incidentDetails: "",
         caseDescription: "",
     });
+
+    const [listeningField, setListeningField] = useState(null);
+
+    const startListening = (fieldName) => {
+        const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert("Speech Recognition not supported in this browser");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = "en-IN"; // change if needed
+        recognition.interimResults = false;
+
+        recognition.start();
+        setListeningField(fieldName);
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+
+            setFormData((prev) => ({
+                ...prev,
+                [fieldName]: prev[fieldName]
+                    ? prev[fieldName] + " " + transcript
+                    : transcript,
+            }));
+
+            setListeningField(null);
+        };
+
+        recognition.onerror = () => {
+            setListeningField(null);
+        };
+
+        recognition.onend = () => {
+            setListeningField(null);
+        };
+    };
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -179,27 +219,70 @@ const FIRForm = ({ onSubmit, loading }) => {
 
                 <div className="h-px bg-[#e8dec3] my-4" />
 
-                {/* Incident Section */}
                 <div className="space-y-4">
                     <h3 className="text-sm font-semibold text-[#8b7d5b] uppercase tracking-wider flex items-center gap-2">
                         <FileText className="w-4 h-4" /> Case Details
                     </h3>
-                    <input
-                        type="text"
-                        name="incidentDetails"
-                        placeholder="Date, Time, and Place (e.g., 12th Dec at 4PM, Main Market)"
-                        className="input-field w-full"
-                        value={formData.incidentDetails}
-                        onChange={handleChange}
-                    />
-                    <textarea
-                        name="caseDescription"
-                        placeholder="Describe the incident in detail... (What happened?)"
-                        className="input-field w-full h-32 resize-none"
-                        value={formData.caseDescription}
-                        onChange={handleChange}
-                        required
-                    />
+
+                    {/* Incident Details with Mic */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            name="incidentDetails"
+                            placeholder="Date, Time, and Place (e.g., 12th Dec at 4PM, Main Market)"
+                            className={`input-field w-full pr-28 transition-all ${listeningField === "incidentDetails" ? "border-red-400 ring-2 ring-red-100 bg-red-50" : ""}`}
+                            value={formData.incidentDetails}
+                            onChange={handleChange}
+                        />
+                        {listeningField === "incidentDetails" && (
+                            <span className="absolute right-10 top-2.5 text-xs font-bold text-red-500 animate-pulse flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                                Listening...
+                            </span>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => startListening("incidentDetails")}
+                            className={`absolute right-2 top-2 p-1 rounded-full transition-colors ${listeningField === "incidentDetails" ? "bg-red-100 text-red-600 shadow-sm" : "text-[#1a3c6e] hover:bg-gray-200"}`}
+                            title={
+                                listeningField === "incidentDetails"
+                                    ? "Recording active"
+                                    : "Click to speak"
+                            }
+                        >
+                            <Mic className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Case Description with Mic */}
+                    <div className="relative">
+                        <textarea
+                            name="caseDescription"
+                            placeholder="Describe the incident in detail... (What happened?)"
+                            className={`input-field w-full h-32 resize-none pr-28 transition-all ${listeningField === "caseDescription" ? "border-red-400 ring-2 ring-red-100 bg-red-50" : ""}`}
+                            value={formData.caseDescription}
+                            onChange={handleChange}
+                            required
+                        />
+                        {listeningField === "caseDescription" && (
+                            <span className="absolute right-10 top-2.5 text-xs font-bold text-red-500 animate-pulse flex items-center gap-1 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                                Listening...
+                            </span>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => startListening("caseDescription")}
+                            className={`absolute right-2 top-2 p-1 rounded-full transition-colors ${listeningField === "caseDescription" ? "bg-red-100 text-red-600 shadow-sm" : "text-[#1a3c6e] hover:bg-gray-200"}`}
+                            title={
+                                listeningField === "caseDescription"
+                                    ? "Recording active"
+                                    : "Click to speak"
+                            }
+                        >
+                            <Mic className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <button

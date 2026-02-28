@@ -34,9 +34,9 @@ else:
 
 START_YEAR = 1950
 END_YEAR = 2025
-MIN_EACH = 10_000  # Target cases per category (civil + criminal + traffic)
+MIN_EACH = 30_000  # Target cases per category (civil + criminal + traffic)
 
-OUTPUT_FILE = "cases_ipc_crime_verdict.json"   # Single output file
+OUTPUT_FILE = "india_legal_cases.json"   # Single output file
 
 # Public AWS Open Data — Indian Supreme Court Judgments
 METADATA_URL = (

@@ -281,31 +281,31 @@ function App() {
                         )}
 
                         {activeStep === 3 && (
-                            <div className="lg:max-w-xl flex flex-col justify-center items-center h-full text-center">
+                            <div className="lg:max-w-xl flex flex-col justify-start items-center h-full text-center pt-12">
+                                <div className="mb-12 w-full max-w-xs">
+                                    <button
+                                        onClick={handlePredictVerdict}
+                                        disabled={loading}
+                                        className="w-full bg-[#1a3c6e] text-white py-4 rounded-lg font-bold hover:bg-[#15325b] transition-colors flex justify-center items-center gap-2 shadow-lg text-lg"
+                                    >
+                                        {loading
+                                            ? "Processing..."
+                                            : "Predict Verdict"}
+                                        <Gavel className="w-5 h-5" />
+                                    </button>
+                                </div>
+
                                 <div className="bg-green-100 p-6 rounded-full mb-6 text-green-700">
                                     <Gavel className="w-12 h-12" />
                                 </div>
                                 <h2 className="text-3xl font-bold text-[#1a3c6e] mb-2">
-                                    Process Complete
+                                    Charge Sheet Drafted
                                 </h2>
                                 <p className="text-gray-600 mb-8 max-w-xs">
                                     The Charge Sheet has been successfully
                                     drafted based on your investigation
                                     findings.
                                 </p>
-
-                                <div className="mb-8 w-full max-w-xs">
-                                    <button
-                                        onClick={handlePredictVerdict}
-                                        disabled={loading}
-                                        className="w-full bg-[#1a3c6e] text-white py-3 rounded-lg font-bold hover:bg-[#15325b] transition-colors flex justify-center items-center gap-2"
-                                    >
-                                        {loading
-                                            ? "Processing..."
-                                            : "Predict Verdict"}
-                                        <Gavel className="w-4 h-4" />
-                                    </button>
-                                </div>
 
                                 <button
                                     onClick={() => {
@@ -314,7 +314,7 @@ function App() {
                                         setQuestionnaire(null);
                                         setChargeSheet(null);
                                     }}
-                                    className="text-[#1a3c6e] font-semibold hover:underline"
+                                    className="text-[#1a3c6e] font-semibold hover:underline mt-4"
                                 >
                                     Start New Case
                                 </button>

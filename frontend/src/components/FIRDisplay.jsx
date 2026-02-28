@@ -41,40 +41,9 @@ const FIRDisplay = ({ firText, language = "en" }) => {
 
     const displayedText = cleanFirText(firText);
 
-    const generatePDF = async (action = "download") => {
-        if (!contentRef.current) return;
-
+    const generatePDF = (action = "download") => {
         try {
-            const element = contentRef.current;
-
-            const canvas = await html2canvas(element, {
-                scale: 2,
-                useCORS: true,
-                logging: false,
-                backgroundColor: "#ffffff",
-            });
-
-            const imgData = canvas.toDataURL("image/png");
             const pdf = new jsPDF("p", "mm", "a4");
-
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            const imgWidth = pdfWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft >= 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-                heightLeft -= pdfHeight;
-            }
 
             // Extract FIR Number for filename
             const firNumberMatch = firText.match(/FIR Number:[\s\t]*([^\n]*)/i);
@@ -88,6 +57,36 @@ const FIRDisplay = ({ firText, language = "en" }) => {
             }
             const safeFirNumber = firNumber.replace(/[^a-z0-9\-_]/gi, "_");
             const filename = `FIR_${safeFirNumber}.pdf`;
+
+            // Native Text PDF Generation
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(14);
+            pdf.text("FIRST INFORMATION REPORT", 105, 20, { align: "center" });
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+
+            const lines = pdf.splitTextToSize(displayedText, 180);
+
+            let y = 35;
+            for (let i = 0; i < lines.length; i++) {
+                if (y > 280) {
+                    pdf.addPage();
+                    y = 20;
+                }
+                pdf.text(lines[i], 15, y);
+                y += 6; // Line spacing
+            }
+
+            // Signature block
+            pdf.setFont("helvetica", "bold");
+            if (y > 260) {
+                pdf.addPage();
+                y = 20;
+            }
+            pdf.text("Signature of Officer In-Charge", 195, y + 15, {
+                align: "right",
+            });
 
             if (action === "download") {
                 pdf.save(filename);

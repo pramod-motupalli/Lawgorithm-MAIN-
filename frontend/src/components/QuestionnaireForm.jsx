@@ -7,6 +7,7 @@ import {
     CheckCircle,
     Plus,
     Trash2,
+    Mic,
 } from "lucide-react";
 
 const QuestionnaireForm = ({
@@ -18,6 +19,7 @@ const QuestionnaireForm = ({
     const [plaintiffAnswers, setPlaintiffAnswers] = useState({});
     const [defendantAnswers, setDefendantAnswers] = useState({});
     const [summary, setSummary] = useState("");
+    const [listeningField, setListeningField] = useState(null);
 
     const t = {}; // Placeholder or removed completely if unused elsewhere, but since t is used heavily, I need to replace all t. usage.
     // Actually, I am deleting this line. The replacements below handle t. usage.
@@ -120,6 +122,34 @@ const QuestionnaireForm = ({
         onGenerateChargeSheet(finalPAnswers, finalDAnswers, summary);
     };
 
+    const startListening = (callbackKey, setter) => {
+        const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert("Speech Recognition not supported in this browser");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = "en-IN";
+        recognition.interimResults = false;
+
+        recognition.start();
+        setListeningField(callbackKey);
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+
+            setter((prev) => (prev ? prev + " " + transcript : transcript));
+
+            setListeningField(null);
+        };
+
+        recognition.onerror = () => setListeningField(null);
+        recognition.onend = () => setListeningField(null);
+    };
+
     return (
         <div className="bg-white rounded-xl shadow-lg border border-[#e0e0e0] overflow-hidden">
             <div className="bg-[#1a3c6e] p-4 flex justify-between items-center">
@@ -141,13 +171,30 @@ const QuestionnaireForm = ({
                         <FileText className="w-5 h-5" /> Investigation Synopsis
                         (Summary)
                     </h3>
-                    <textarea
-                        value={summary}
-                        onChange={(e) => setSummary(e.target.value)}
-                        placeholder="Enter a brief synopsis of the investigation findings..."
-                        className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none text-sm"
-                        rows={3}
-                    />
+                    <div className="relative">
+                        <textarea
+                            value={summary}
+                            onChange={(e) => setSummary(e.target.value)}
+                            placeholder="Enter a brief synopsis of the investigation findings..."
+                            className="w-full p-3 pr-10 border border-gray-300 rounded focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none text-sm"
+                            rows={3}
+                        />
+                        <button
+                            type="button"
+                            onClick={() =>
+                                startListening("summary", setSummary)
+                            }
+                            className="absolute right-2 top-2 text-[#1a3c6e]"
+                        >
+                            <Mic
+                                className={`w-5 h-5 ${
+                                    listeningField === "summary"
+                                        ? "text-red-500 animate-pulse"
+                                        : ""
+                                }`}
+                            />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Plaintiff Section */}
@@ -165,15 +212,44 @@ const QuestionnaireForm = ({
                                 <p className="font-medium text-gray-800 mb-2">
                                     {idx + 1}. {q}
                                 </p>
-                                <textarea
-                                    value={plaintiffAnswers[q] || ""}
-                                    onChange={(e) =>
-                                        handlePChange(q, e.target.value)
-                                    }
-                                    placeholder="Enter answer..."
-                                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none text-sm"
-                                    rows={2}
-                                />
+                                <div className="relative">
+                                    <textarea
+                                        value={plaintiffAnswers[q] || ""}
+                                        onChange={(e) =>
+                                            handlePChange(q, e.target.value)
+                                        }
+                                        placeholder="Enter answer..."
+                                        className="w-full p-2 pr-10 border border-gray-300 rounded focus:ring-2 focus:ring-[#1a3c6e] focus:border-transparent outline-none text-sm"
+                                        rows={2}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            startListening(
+                                                `plaintiff-${idx}`,
+                                                (updateFn) =>
+                                                    setPlaintiffAnswers(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            [q]: updateFn(
+                                                                prev[q] || "",
+                                                            ),
+                                                        }),
+                                                    ),
+                                            )
+                                        }
+                                        className="absolute right-2 top-2 text-[#1a3c6e]"
+                                    >
+                                        <Mic
+                                            className={`w-4 h-4 ${
+                                                listeningField ===
+                                                `plaintiff-${idx}`
+                                                    ? "text-red-500 animate-pulse"
+                                                    : ""
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
                             </div>
                         ))}
 
@@ -251,15 +327,44 @@ const QuestionnaireForm = ({
                                 <p className="font-medium text-gray-800 mb-2">
                                     {idx + 1}. {q}
                                 </p>
-                                <textarea
-                                    value={defendantAnswers[q] || ""}
-                                    onChange={(e) =>
-                                        handleDChange(q, e.target.value)
-                                    }
-                                    placeholder="Enter answer..."
-                                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-red-700 focus:border-transparent outline-none text-sm"
-                                    rows={2}
-                                />
+                                <div className="relative">
+                                    <textarea
+                                        value={defendantAnswers[q] || ""}
+                                        onChange={(e) =>
+                                            handleDChange(q, e.target.value)
+                                        }
+                                        placeholder="Enter answer..."
+                                        className="w-full p-2 pr-10 border border-gray-300 rounded focus:ring-2 focus:ring-red-700 focus:border-transparent outline-none text-sm"
+                                        rows={2}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            startListening(
+                                                `defendant-${idx}`,
+                                                (updateFn) =>
+                                                    setDefendantAnswers(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            [q]: updateFn(
+                                                                prev[q] || "",
+                                                            ),
+                                                        }),
+                                                    ),
+                                            )
+                                        }
+                                        className="absolute right-2 top-2 text-red-700"
+                                    >
+                                        <Mic
+                                            className={`w-4 h-4 ${
+                                                listeningField ===
+                                                `defendant-${idx}`
+                                                    ? "text-red-500 animate-pulse"
+                                                    : ""
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
                             </div>
                         ))}
 
