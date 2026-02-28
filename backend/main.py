@@ -5,7 +5,13 @@ import os
 from dotenv import load_dotenv
 import json
 from groq import Groq
-from models import FIRRequest, QuestionnaireRequest, ChargeSheetRequest, VerdictRequest
+from models import (
+    FIRRequest,
+    QuestionnaireRequest,
+    ChargeSheetRequest,
+    VerdictRequest,
+    FairnessRequest,
+)
 
 load_dotenv()
 
@@ -27,22 +33,23 @@ if not GROQ_API_KEY:
 
 client = Groq(api_key=GROQ_API_KEY)
 
-from utils import load_all_laws, get_relevant_sections
+from utils import load_semantic_model, get_relevant_sections, get_relevant_cases
 
-# Load Law Data into memory on startup
-load_all_laws()
+# Load ChromaDB connections into memory on startup
+load_semantic_model()
+
 
 @app.post("/api/generate_fir")
 async def generate_fir(request: FIRRequest):
     try:
         # Retrieve Relevant Laws based on case description
-        relevant_laws = get_relevant_sections(request.case_description)
+        relevant_laws = get_relevant_sections(request.case_description, limit=5)
         print(f"Context injected: {len(relevant_laws)} chars")
 
         # Construct the prompt based on user requirements
         complainant_info = f"Name: {request.complainant.name}, Address: {request.complainant.address}, Contact: {request.complainant.contact}"
         accused_info = f"Name: {request.accused.name if request.accused else 'Unknown person(s)'}, Address: {request.accused.address if request.accused else 'Not provided'}"
-        
+
         # New Official Info
         official_info = f"""
         Police Station: {request.police_station}
@@ -50,7 +57,29 @@ async def generate_fir(request: FIRRequest):
         Registration Date: {request.registration_date}
         Investigating Officer: {request.officer_name} ({request.officer_rank})
         """
+
+        # --- STEP 0: PRE-CHECK VALIDATION ---
+        check_prompt = f"""
+        Evaluate this case description text. Is it a meaningful (even if brief) description of a criminal incident, dispute, or legal case?
+        Or is it gibberish, meaninglessly short, or entirely irrelevant?
         
+        Text: "{request.case_description}"
+        
+        Respond with ONLY 'VALID' if it is meaningful enough to process, or 'INVALID' if it is gibberish/not a case. No other words.
+        """
+
+        check_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": check_prompt}],
+            model="llama-3.3-70b-versatile",
+            temperature=0.0,
+            max_tokens=10,
+        )
+        if "INVALID" in check_completion.choices[0].message.content.upper():
+            raise HTTPException(
+                status_code=400,
+                detail="The case description provided is too vague, short, or meaningless. Please provide a clear, detailed description of the incident.",
+            )
+
         # --- STEP 1: SEMANTIC QUERY EXPANSION ---
         # Ask LLM to identify potential IPC sections and legal terms from the informal description
         # This acts as a bridge between "User Language" and "Legal Language"
@@ -62,22 +91,56 @@ async def generate_fir(request: FIRRequest):
         
         Example Output: Section 378, Theft, Section 379, Movable Property, Dishonest Intention
         """
-        
+
         expansion_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": expansion_prompt}],
             model="llama-3.3-70b-versatile",
             temperature=0.1,
-            max_tokens=50
+            max_tokens=50,
         )
         legal_keywords = expansion_completion.choices[0].message.content
         print(f"Semantic Expansion: {legal_keywords}")
-        
+
         # --- STEP 2: RETRIEVAL ---
         # Combine user description with expert keywords for a rich search query
         search_query = f"{request.case_description} {legal_keywords}"
-        relevant_laws = get_relevant_sections(search_query)
-        print(f"Context injected: {len(relevant_laws)} chars")
+        relevant_laws_raw = get_relevant_sections(search_query, limit=5)
+        print(f"Initial Context injected: {len(relevant_laws_raw)} chars")
+        print(
+            f"\n--- [RAG] INITIAL FETCHED LAWS ---\n{relevant_laws_raw}\n----------------------------------"
+        )
+
+        # --- STEP 3: VERIFICATION / RELEVANCE FILTERING ---
+        verification_prompt = f"""
+        You are a strict Legal Assessor and Expert.
+        Below is a case description and a set of potentially relevant Indian Law sections (fetched via vector search).
+        Carefully evaluate each section and determine if it is ACTUALLY relevant to the specific facts of the case.
         
+        Case Description: "{request.case_description}"
+        
+        Fetched Sections:
+        {relevant_laws_raw}
+        
+        Task:
+        1. Select and return ONLY the TOP most relevant Indian Penal Code (IPC) and other law sections that are genuinely applicable to the case. Keep the original text structure of the relevant sections.
+        2. If a section from the 'Fetched Sections' is irrelevant or weakly related, DROP IT entirely.
+        3. CRITICAL: If the fetched sections do not contain the top most relevant IPC sections for this specific crime, or if they are entirely irrelevant, YOU MUST use your own legal knowledge to modify the list. You must add the correct and top relevant IPC, CrPC, or other relevant law sections along with a brief description of each section.
+        Do not add any conversational filler. Treat your response as the final filtered context.
+        """
+
+        verification_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": verification_prompt}],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=1500,
+        )
+
+        relevant_laws = verification_completion.choices[0].message.content
+        print(f"Verified Context injected: {len(relevant_laws)} chars")
+        print(
+            f"\n--- [RAG] VERIFIED LAWS FILTERED ---\n{relevant_laws}\n------------------------------------"
+        )
+
         system_prompt = f"""You are an expert Indian Police Officer and Legal Drafting Assistant with deep knowledge of the Indian Penal Code (IPC), CrPC, Motor Vehicles Act (MVA), and other standard Indian Laws.
 
 Your task is to convert informal user-provided case details into a legally structured First Information Report (FIR).
@@ -147,14 +210,8 @@ Input Details:
 
         completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_content
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.3,
@@ -164,8 +221,9 @@ Input Details:
         return {"fir": generated_fir}
 
     except Exception as e:
-        print(f"Error generating FIR: {str(e)}") # Log the error
+        print(f"Error generating FIR: {str(e)}")  # Log the error
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/generate_questionnaire")
 async def generate_questionnaire(request: QuestionnaireRequest):
@@ -198,11 +256,11 @@ async def generate_questionnaire(request: QuestionnaireRequest):
         completion = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": user_content},
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.4,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
 
         return json.loads(completion.choices[0].message.content)
@@ -210,6 +268,7 @@ async def generate_questionnaire(request: QuestionnaireRequest):
     except Exception as e:
         print(f"Error generating questionnaire: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/generate_charge_sheet")
 async def generate_charge_sheet(request: ChargeSheetRequest):
@@ -243,7 +302,8 @@ async def generate_charge_sheet(request: ChargeSheetRequest):
         ## 4. BRIEF FACTS OF THE CASE
         ...
 
-        ## 5. INVESTIGATION FINDINGS (SUMMARY OF INTERROGATION)
+        ## 5. INVESTIGATION FINDINGS & QUESTIONNAIRE
+        (Write a brief summary and then YOU MUST INCLUDE the exact cross-examination Questions and Answers for both the Complainant and the Accused here).
         ...
 
         ## 6. CHARGES FRAMED
@@ -262,8 +322,12 @@ async def generate_charge_sheet(request: ChargeSheetRequest):
         """
 
         # Format Q&A for the model
-        p_qa = "\n".join([f"Q: {q}\nA: {a}" for q, a in request.plaintiff_answers.items()])
-        d_qa = "\n".join([f"Q: {q}\nA: {a}" for q, a in request.defendant_answers.items()])
+        p_qa = "\n".join(
+            [f"Q: {q}\nA: {a}" for q, a in request.plaintiff_answers.items()]
+        )
+        d_qa = "\n".join(
+            [f"Q: {q}\nA: {a}" for q, a in request.defendant_answers.items()]
+        )
 
         user_content = f"""
         FIR Context:
@@ -286,7 +350,7 @@ async def generate_charge_sheet(request: ChargeSheetRequest):
         completion = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": user_content},
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.3,
@@ -298,19 +362,59 @@ async def generate_charge_sheet(request: ChargeSheetRequest):
         print(f"Error generating charge sheet: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/predict_verdict")
 async def predict_verdict(request: VerdictRequest):
     try:
-        system_prompt = f"""You are a highly experienced Indian District Judge.
+        # 1. Fetch historical cases related to this case
+        historical_cases_raw = get_relevant_cases(request.case_description, limit=5)
+        print(f"\n[RAG] Initial Historical Cases fetched.")
+
+        # 2. Add an agentic verification step to ensure they are genuinely relevant
+        verification_prompt = f"""
+        You are a highly analytical Legal Assessor.
+        You have been given a case description and some potentially relevant historical case precedents retrieved by a vector database search.
+        Carefully evaluate the historical cases. If they are irrelevant, drop them. Return only the relevant cases and provide a 1-sentence reasoning for why they establish precedent for the case at hand.
+        
+        Current Case Description: "{request.case_description}"
+        
+        Retrieved Historical Precedents:
+        {historical_cases_raw}
+        
+        Task:
+        Filter the historical precedents. Return ONLY the relevant historical cases along with a brief reason for their relevance. If none are relevant, return "No strictly relevant precedents established."
+        """
+
+        verification_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": verification_prompt}],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=1500,
+        )
+
+        historical_cases_context = verification_completion.choices[0].message.content
+        print(
+            f"[RAG] Verified Historical Cases injected: {len(historical_cases_context)} characters"
+        )
+        print(
+            f"\n--- [RAG] FILTERED VERIFIED PRECEDENTS ---\n{historical_cases_context}\n--------------------------------------"
+        )
+
+        system_prompt = f"""You are a highly experienced Indian Judge.
         
         Your task is to review the Charge Sheet and Case Description and predict the most likely legal verdict based on the Indian Penal Code (IPC) and CrPC.
+        
+        To guide your judgment and to remain consistent with established precedent, here are some historical case rulings similar to this one:
+        <HISTORICAL_PRECEDENTS>
+        {historical_cases_context}
+        </HISTORICAL_PRECEDENTS>
         
         Specifically, you must determine:
         1. Whether the accused is likely to be convicted (Guilty) or acquitted (Not Guilty).
         2. If Guilty, predict the likely Punishment:
            - Jail Term (Years/Months)
            - Fine Amount (in INR)
-           - Rationale (Brief legal reasoning)
+           - Rationale (Brief legal reasoning comparing facts to precedents if applicable)
         
         Output format must be valid JSON:
         {{
@@ -333,11 +437,11 @@ async def predict_verdict(request: VerdictRequest):
         completion = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": user_content},
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.2,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
 
         return json.loads(completion.choices[0].message.content)
@@ -346,6 +450,51 @@ async def predict_verdict(request: VerdictRequest):
         print(f"Error predicting verdict: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/")
 def read_root():
     return {"message": "FIR Generator API is running"}
+
+
+@app.post("/api/analyze_fairness")
+async def analyze_fairness(request: FairnessRequest):
+    try:
+        system_prompt = """You are a highly objective Judicial Auditor focused on ensuring fair, unbiased legal outcomes.
+        
+        Your task is to analyze the provided Case Description, Charge Sheet, and the initial Predicted Verdict.
+        Determine if the proceedings and the predicted verdict are completely fair and logically sound.
+        
+        CRITICAL RULE FOR EFFICIENCY: You should default to labeling the verdict as "Fair" in most cases. Minor discrepancies, small formatting issues, or slight logical assumptions should be noted in your explanation but MUST NOT cause the label to be "Needs Review".
+        ONLY use "Unfair" or "Needs Review" if there is blatant demographic bias, glaring logical hallucinations, extreme severity mismatches, or undeniable evidence that the verdict directly contradicts the facts.
+        
+        Output format must be valid JSON:
+        {
+            "overall_label": "Fair" or "Unfair" or "Needs Review",
+            "explanation": "Provide a quick, concise explanation on why you chose this label based on the evidence."
+        }
+        
+        IMPORTANT: Generate the output strictly in English.
+        """
+
+        user_content = f"""
+        Case Description: {request.case_description}
+        Original Verdict: {request.original_verdict}
+        Charge Sheet Content (Includes Interrogation):
+        {request.charge_sheet_content}
+        """
+
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+
+        return json.loads(completion.choices[0].message.content)
+
+    except Exception as e:
+        print(f"Error in fairness analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

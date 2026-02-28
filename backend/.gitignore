@@ -3,3 +3,12 @@ __pycache__/
 *.pyc
 .env
 .pytest_cache/
+test_laws.py
+test_semantic.py
+# generate_pdf.py
+test_run.py
+test_lib.py
+test.py
+test_laws.py
+build_laws_vectordb.py
+test_chromadb.py

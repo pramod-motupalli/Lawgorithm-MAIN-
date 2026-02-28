@@ -25,6 +25,31 @@ const FIRForm = ({ onSubmit, loading }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+
+        const text = formData.caseDescription.trim();
+
+        // Basic gibberish heuristics
+        const isGibberish = (str) => {
+            if (str.length < 10) return true; // Too short
+            if (/^(.)\1+$/.test(str)) return true; // Repeating single character
+            if (str.length > 20 && !str.includes(" ")) return true; // Long string without spaces
+            if (!/[aeiouyAEIOUY]/.test(str)) return true; // No vowels
+            if (/[bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ]{6,}/.test(str))
+                return true; // 6+ consonants in a row
+
+            // Calculate unique characters for repeating patterns
+            const chars = str.replace(/\s/g, "");
+            const uniqueChars = new Set(chars).size;
+            if (chars.length > 15 && uniqueChars < 5) return true;
+
+            return false;
+        };
+
+        if (isGibberish(text)) {
+            alert("enter meaning full description");
+            return;
+        }
+
         onSubmit(formData);
     };
 

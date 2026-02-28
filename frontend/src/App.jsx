@@ -6,6 +6,7 @@ import FIRDisplay from "./components/FIRDisplay";
 import QuestionnaireForm from "./components/QuestionnaireForm";
 import ChargeSheetDisplay from "./components/ChargeSheetDisplay";
 import VerdictDisplay from "./components/VerdictDisplay";
+import FairnessPanel from "./components/FairnessPanel";
 
 function App() {
     const [firText, setFirText] = useState("");
@@ -15,6 +16,10 @@ function App() {
     const [questionnaire, setQuestionnaire] = useState(null);
     const [chargeSheet, setChargeSheet] = useState(null);
     const [verdict, setVerdict] = useState(null);
+    const [fairnessReport, setFairnessReport] = useState(null);
+    const [fairnessLoading, setFairnessLoading] = useState(false);
+    // Store answers for fairness analysis
+    const [lastAnswers, setLastAnswers] = useState({ p: {}, d: {} });
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -98,6 +103,8 @@ function App() {
     const handleGenerateChargeSheet = async (pAnswers, dAnswers, summary) => {
         setLoading(true);
         setError("");
+        // Store answers for later fairness analysis
+        setLastAnswers({ p: pAnswers, d: dAnswers });
 
         try {
             const payload = {
@@ -108,7 +115,6 @@ function App() {
                 investigation_summary: summary || "",
                 officer_name: formData.officerName || "Not provided",
                 officer_rank: formData.officerRank || "Not provided",
-                // officer_rank: formData.officerRank || "Not provided",
                 police_station: formData.policeStation || "Not provided",
             };
 
@@ -129,6 +135,7 @@ function App() {
     const handlePredictVerdict = async () => {
         if (!chargeSheet || !formData) return;
         setLoading(true);
+        setFairnessReport(null);
         setError("");
 
         try {
@@ -139,8 +146,31 @@ function App() {
                     case_description: formData.caseDescription,
                 },
             );
-            setVerdict(response.data);
+            const verdictData = response.data;
+            setVerdict(verdictData);
             setActiveStep(4);
+
+            // Auto-run fairness analysis after verdict
+            setFairnessLoading(true);
+            try {
+                const fairnessResponse = await axios.post(
+                    "http://127.0.0.1:8000/api/analyze_fairness",
+                    {
+                        charge_sheet_content: chargeSheet,
+                        case_description: formData.caseDescription,
+                        original_verdict: verdictData.verdict || "Guilty",
+                        plaintiff_answers: lastAnswers.p,
+                        defendant_answers: lastAnswers.d,
+                        accused_name:
+                            formData.accusedName || "Unknown person(s)",
+                    },
+                );
+                setFairnessReport(fairnessResponse.data);
+            } catch (fairErr) {
+                console.error("Fairness analysis failed:", fairErr);
+            } finally {
+                setFairnessLoading(false);
+            }
         } catch (err) {
             console.error(err);
             setError("Failed to predict verdict.");
@@ -264,22 +294,7 @@ function App() {
                                     findings.
                                 </p>
 
-                                <button
-                                    onClick={() => {
-                                        setActiveStep(1);
-                                        setFirText("");
-                                        setQuestionnaire(null);
-                                        setChargeSheet(null);
-                                    }}
-                                    className="text-[#1a3c6e] font-semibold hover:underline"
-                                >
-                                    Start New Case
-                                </button>
-
-                                <div className="mt-8 pt-8 border-t w-full max-w-xs">
-                                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-4">
-                                        Next Step
-                                    </h3>
+                                <div className="mb-8 w-full max-w-xs">
                                     <button
                                         onClick={handlePredictVerdict}
                                         disabled={loading}
@@ -291,6 +306,18 @@ function App() {
                                         <Gavel className="w-4 h-4" />
                                     </button>
                                 </div>
+
+                                <button
+                                    onClick={() => {
+                                        setActiveStep(1);
+                                        setFirText("");
+                                        setQuestionnaire(null);
+                                        setChargeSheet(null);
+                                    }}
+                                    className="text-[#1a3c6e] font-semibold hover:underline"
+                                >
+                                    Start New Case
+                                </button>
                             </div>
                         )}
 
@@ -361,11 +388,15 @@ function App() {
                                 chargeSheetText={chargeSheet}
                             />
                         ) : activeStep === 4 && verdict ? (
-                            <div className="h-full flex flex-col">
-                                <div className="flex-1 overflow-y-auto mb-4 p-1">
+                            <div className="h-full flex flex-col overflow-y-auto pb-8">
+                                <div className="p-1">
                                     <VerdictDisplay verdictData={verdict} />
+                                    <FairnessPanel
+                                        fairnessData={fairnessReport}
+                                        loading={fairnessLoading}
+                                    />
                                 </div>
-                                <div className="opacity-50 pointer-events-none h-64 overflow-hidden border rounded-xl mt-4 bg-gray-50 relative">
+                                <div className="opacity-50 pointer-events-none h-64 overflow-hidden border rounded-xl mt-4 bg-gray-50 relative shrink-0">
                                     <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent z-10"></div>
                                     <ChargeSheetDisplay
                                         firNumber={formData?.firNumber}
