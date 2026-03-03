@@ -85,7 +85,9 @@ def build_cases_vector_db():
 
     print("Creating collection 'historical_cases'...")
     collection = client.create_collection(
-        name="historical_cases", embedding_function=sentence_transformer_ef
+        name="historical_cases",
+        embedding_function=sentence_transformer_ef,
+        metadata={"hnsw:space": "cosine"},
     )
 
     BATCH_SIZE = 5000
