@@ -2,70 +2,70 @@
 
 ## Overview
 
-This is the backend service for the **Lawgorithm** application. It provides a RESTful API to generate legally structured First Information Reports (FIRs) using AI.
+This is the backend service for the **Lawgorithm** application. It provides a RESTful API to generate legally structured FIRs, conduct investigations, and predict court verdicts using advanced RAG and AI Agents.
 
-It is built with **FastAPI** and integrates with **Groq (Llama 3.3 70B)** for text generation.
+It is built with **FastAPI** and leverages **Groq (Llama 3.3 70B)** for high-reasoning legal tasks.
 
-## Key Features
+## 🧠 Core Intelligence
 
--   **AI-Powered FIR Drafting**: Converts informal case descriptions into official FIR format.
--   **Smart Legal Context**:
-    -   Uses a **Semantic Query Expansion** step to understand the "meaning" of a crime (e.g., mapping "snatching" to "Section 356/379").
-    -   Implements a **Weighted Keyword Search** algorithm to find the most relevant IPC sections from a local JSON database.
-    -   Injects top 15 relevant laws into the AI's context for accurate citations.
--   **AI-Powered Verdict Prediction**:
-    -   **How it Works**: The system simulates a judicial review by acting as an expert Indian District Judge.
-    -   **Inputs**: It inputs the entire generated _Charge Sheet_ (including investigation findings) and the original _Case Description_.
-    -   **Process**: It evaluates the inputs against the Indian Penal Code (IPC) and Criminal Procedure Code (CrPC) standards to determine guilt beyond a reasonable doubt.
-    -   **Outputs**:
-        -   **Verdict**: Guilty or Not Guilty (or Partially Guilty).
-        -   **Punishment**: Specific jail term (e.g., "3 years Rigorous Imprisonment") and fine amount in INR.
-        -   **Legal Rationale**: A concise explanation citing specific legal reasons for the judgment, similar to a real court order.
--   **Official Details Support**: structured inputs for Police Station, Officer Rank, FIR Number, etc.
+### 1. Hybrid RAG Engine
 
-## Directory Structure
+Lawgorithm uses a hybrid retrieval system to ensure legal accuracy:
 
--   `main.py`: The entry point for the FastAPI application. Handles API routes and LLM interaction.
--   `models.py`: Pydantic models defining the data structure for API requests.
--   `utils.py`: Contains the logic for loading IPC data, expanding queries, and searching for relevant sections.
--   `laws_json/`: Directory containing the `ipc.json` reference file.
+- **Laws DB**: A ChromaDB collection of the Indian Penal Code (IPC), CrPC, and various Indian Acts.
+- **Cases DB**: A ChromaDB collection of historical case precedents.
+- **Weighted Retrieval**: Combines semantic embeddings (Sentence Transformers) with keyword-based filtering to narrow down relevant sections.
 
-## Setup Instructions
+### 2. Multi-Agent Pipeline
+
+- **Legal Evaluator**: Validates if the user input is meaningful or gibberish before processing.
+- **Section Guesser**: An agent that identifies potential legal act/section candidates to optimize vector search.
+- **Precedent Retrieval Agent**: An autonomous loop that uses tools (function calling) to search the Cases DB, analyze results, and refine queries until 3-5 high-quality precedents are found.
+- **Judicial Auditor**: Analyzes the final verdict for fairness and potential demographic bias.
+
+## 🛠 Endpoints
+
+- `POST /api/generate_fir`: Drafts an FIR with retrieved legal context.
+- `POST /api/generate_questionnaire`: Creates interrogation questions and simulated answers.
+- `POST /api/generate_charge_sheet`: Compiles investigation data into a Section 173 CrPC report.
+- `POST /api/predict_verdict`: Uses agentic retrieval to predict outcome and sentencing.
+- `POST /api/analyze_fairness`: Audits the verdict for legal consistency and bias.
+
+## 📂 Directory Structure
+
+- `main.py`: Entry point for FastAPI and core endpoint logic.
+- `utils.py`: Contains ChromaDB connection logic, semantic search functions, and embedding models.
+- `build_laws_chromadb.py`: Utility to ingest legal JSON files into ChromaDB.
+- `build_cases_chromadb.py`: Utility to ingest historical case datasets into ChromaDB.
+- `models.py`: Pydantic schemas for request/response validation.
+- `laws_json/`: Raw dataset of Indian laws.
+
+## 🚀 Setup
 
 ### 1. Prerequisites
 
--   Python 3.8+
--   A Groq API Key
+- Python 3.9+
+- Groq API Key
 
 ### 2. Installation
 
-Create a virtual environment and install dependencies:
-
 ```bash
 python -m venv venv
-# Windows
-.\venv\Scripts\activate
-# Mac/Linux
-source venv/bin/activate
-
+source venv/bin/activate  # .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-### 3. Environment Configuration
+### 3. Database Initialization
 
-Create a `.env` file in the `backend` directory:
+Before running for the first time, you may need to build the vector indexes:
 
-```env
-GROQ_API_KEY=your_groq_api_key_here
+```bash
+python build_laws_chromadb.py
+python build_cases_chromadb.py
 ```
 
-### 4. Running the Server
-
-Start the FastAPI development server:
+### 4. Run
 
 ```bash
 uvicorn main:app --reload --port 8000
 ```
-
-The API will be available at `http://127.0.0.1:8000`.
-API Docs are available at `http://127.0.0.1:8000/docs`.
