@@ -63,7 +63,7 @@ def build_vector_db():
     print("Initializing ChromaDB persistent client...")
     client = chromadb.PersistentClient(path=db_path)
 
-    # We use the default all-MiniLM-L6-v2 model
+    # We use the all-MiniLM-L6-v2 model
     sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name="all-MiniLM-L6-v2"
     )

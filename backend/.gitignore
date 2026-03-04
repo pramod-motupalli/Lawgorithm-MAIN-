@@ -16,3 +16,4 @@ cases_ipc_crime_verdict.json
 laws_chromadb
 cases_chromadb
 test_rag.py
+test_fetch_cases.py

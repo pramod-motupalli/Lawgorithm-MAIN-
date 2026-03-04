@@ -123,6 +123,7 @@ def get_relevant_sections(case_description, limit=15):
                 scored_results.sort(key=lambda x: x["score"], reverse=True)
 
                 formatted_outputs = []
+                print(f"=== FETCHED RELEVANT SECTIONS (Top {limit}) ===")
                 for entry in scored_results[:limit]:
                     meta = entry["meta"]
                     desc = meta.get("desc", "")
@@ -130,6 +131,7 @@ def get_relevant_sections(case_description, limit=15):
 
                     out_str = f"[{meta.get('law')}] Section {meta.get('section')}: {meta.get('title')}\n{trunc_desc}\n[Reasoning: {entry['details']} (Score: {entry['score']:.2f})]"
                     formatted_outputs.append(out_str)
+                    print(out_str)
 
                 return "\n\n".join(formatted_outputs)
 
@@ -140,26 +142,37 @@ def get_relevant_sections(case_description, limit=15):
         return ""
 
 
-def get_relevant_cases(case_description, limit=3):
+def get_relevant_cases(case_description, limit=3, min_similarity=0.50):
+    """Fetch relevant historical cases. Only returns cases above the min_similarity threshold."""
     try:
         if HAS_SEMANTIC:
             load_semantic_model()  # Make sure case db is loaded
             if CASES_CHROMA_COLLECTION:
                 results = CASES_CHROMA_COLLECTION.query(
-                    query_texts=[case_description], n_results=limit
+                    query_texts=[case_description], n_results=100
                 )
 
                 if not results["ids"] or not results["ids"][0]:
                     return "No relevant historical cases found."
 
                 formatted_outputs = []
+                seen_facts = set()
+
                 for i in range(len(results["ids"][0])):
                     doc = results["documents"][0][i]
+                    if doc in seen_facts:
+                        continue
+                    seen_facts.add(doc)
+
                     meta = results["metadatas"][0][i]
                     dist = results["distances"][0][i]
 
                     # Convert Cosine distance (1 - similarity) into a similarity score
                     score = 1.0 - dist
+
+                    # Skip results below the minimum similarity threshold
+                    if score < min_similarity:
+                        continue
 
                     out_str = (
                         f"--- Historical Case Match (Similarity: {score:.2f}) ---\n"
@@ -170,10 +183,25 @@ def get_relevant_cases(case_description, limit=3):
                     )
                     formatted_outputs.append(out_str)
 
+                    if len(formatted_outputs) >= limit:
+                        break
+
+                if not formatted_outputs:
+                    print("=== NO CASES ABOVE SIMILARITY THRESHOLD ===")
+                    return (
+                        "No relevant historical cases found matching the current case."
+                    )
+
+                print(
+                    f"=== FETCHED HISTORICAL CASES (Top {len(formatted_outputs)}, threshold={min_similarity}) ==="
+                )
+                for out in formatted_outputs:
+                    print(out)
+
                 return "\n\n".join(formatted_outputs)
 
         return "Semantic search is disabled for cases. Please `pip install chromadb` and build the historical cases DB."
 
     except Exception as e:
         print(f"Error querying Cases ChromaDB: {e}")
-        return ""
+        return "No relevant historical cases found."

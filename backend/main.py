@@ -36,10 +36,6 @@ load_semantic_model()
 @app.post("/api/generate_fir")
 async def generate_fir(request: FIRRequest):
     try:
-        # Retrieve Relevant Laws based on case description
-        relevant_laws = get_relevant_sections(request.case_description, limit=5)
-        print(f"Context injected: {len(relevant_laws)} chars")
-
         # Construct the prompt based on user requirements
         complainant_info = f"Name: {request.complainant.name}, Address: {request.complainant.address}, Contact: {request.complainant.contact}"
         accused_info = f"Name: {request.accused.name if request.accused else 'Unknown person(s)'}, Address: {request.accused.address if request.accused else 'Not provided'}"
@@ -74,48 +70,51 @@ async def generate_fir(request: FIRRequest):
                 detail="The case description provided is too vague, short, or meaningless. Please provide a clear, detailed description of the incident.",
             )
 
-        # --- STEP 1: SEMANTIC QUERY EXPANSION ---
-        # Ask LLM to identify potential IPC sections and legal terms from the informal description
-        # This acts as a bridge between "User Language" and "Legal Language"
-        expansion_prompt = f"""
-        Analyze this criminal case description and list the top 5 most relevant Indian Law Section Numbers (e.g. IPC, CrPC, MVA, NIA, etc.) and Legal Keywords.
-        Return ONLY a comma-separated list.
-        
-        Case: "{request.case_description}"
-        
-        Example Output: Section 378, Theft, Section 379, Movable Property, Dishonest Intention
-        """
-
-        expansion_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": expansion_prompt}],
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,
-            max_tokens=50,
-        )
-        legal_keywords = expansion_completion.choices[0].message.content
-        print(f"Semantic Expansion: {legal_keywords}")
-
-        # --- STEP 2: RETRIEVAL ---
-        # Combine user description with expert keywords for a rich search query
-        search_query = f"{request.case_description} {legal_keywords}"
-        relevant_laws_raw = get_relevant_sections(search_query, limit=5)
-        print(f"Initial Context injected: {len(relevant_laws_raw)} chars")
-        # --- STEP 3: VERIFICATION / RELEVANCE FILTERING ---
-        verification_prompt = f"""
-        You are a strict Legal Assessor and Expert.
-        Below is a case description and a set of potentially relevant Indian Law sections (fetched via vector search).
-        Carefully evaluate each section and determine if it is ACTUALLY relevant to the specific facts of the case.
+        # --- STEP 1: AGENT GUESSES POSSIBLE SECTIONS ---
+        guess_prompt = f"""
+        Based on the following case description, act as a legal expert and guess the possible legal sections from the Indian Penal Code (IPC),CPC,HMA,IDA,IEA,MVA,NIA and Code of Criminal Procedure (CrPC).
+        List the section numbers and a brief keyword for each. This will be used to fetch vectors from a database.
         
         Case Description: "{request.case_description}"
         
-        Fetched Sections:
-        {relevant_laws_raw}
+        Respond ONLY with a comma-separated list of guessed sections and keywords (e.g. IPC Section 378 - Theft, IPC Section 379, CrPC Section 154).
+        """
+
+        guess_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": guess_prompt}],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=100,
+        )
+        guessed_sections = guess_completion.choices[0].message.content
+        print(f"Guessed Sections: {guessed_sections}")
+
+        # --- STEP 2: FETCH VECTORS BASED ON USER INPUTS & GUESSED SECTIONS ---
+        search_query = f"{request.case_description} {guessed_sections}"
+        fetched_relevant_sections_raw = get_relevant_sections(search_query, limit=10)
+        print(
+            f"Fetched Sections context size: {len(fetched_relevant_sections_raw)} chars"
+        )
+
+        # --- STEP 3: VERIFICATION AND MODIFICATION ---
+        verification_prompt = f"""
+        You are an expert Indian Legal Assessor and Judicial Officer.
+        You have been given a user case description, guessed sections from an AI assistant, and fetched legal section texts from a database.
         
-        Task:
-        1. Select and return ONLY the TOP most relevant Indian Penal Code (IPC) and other law sections that are genuinely applicable to the case. Keep the original text structure of the relevant sections.
-        2. If a section from the 'Fetched Sections' is irrelevant or weakly related, DROP IT entirely.
-        3. CRITICAL: If the fetched sections do not contain the top most relevant IPC sections for this specific crime, or if they are entirely irrelevant, YOU MUST use your own legal knowledge to modify the list. You must add the correct and top relevant IPC, CrPC, or other relevant law sections along with a brief description of each section.
-        Do not add any conversational filler. Treat your response as the final filtered context.
+        Your task is to verify if the fetched sections and guessed sections are TRULY related to the case.
+        - If the fetched sections are related, select the most relevant ones.
+        - If they are NOT related, or crucial sections are missing, you MUST modify the results and include the correct sections from your own knowledge of IPC and CrPC.
+        
+        Case Description: "{request.case_description}"
+        
+        Guessed Sections from AI assistant: 
+        {guessed_sections}
+        
+        Fetched Sections from DB:
+        {fetched_relevant_sections_raw}
+        
+        Output ONLY the final list of the 3-5 most specific, confirmed relevant sections. 
+        Format cleanly with the section title and a 1-sentence explanation of why it precisely applies to the facts of the case. No conversational filler.
         """
 
         verification_completion = client.chat.completions.create(
@@ -352,36 +351,119 @@ async def generate_charge_sheet(request: ChargeSheetRequest):
 @app.post("/api/predict_verdict")
 async def predict_verdict(request: VerdictRequest):
     try:
-        # 1. Fetch historical cases related to this case
-        historical_cases_raw = get_relevant_cases(request.case_description, limit=5)
-        # 2. Add an agentic verification step to ensure they are genuinely relevant
-        verification_prompt = f"""
-        You are a highly analytical Legal Assessor.
-        You have been given a case description and some potentially relevant historical case precedents retrieved by a vector database search.
-        Carefully evaluate the historical cases. If they are irrelevant, drop them. Return only the relevant cases and provide a 1-sentence reasoning for why they establish precedent for the case at hand.
-        
-        Current Case Description: "{request.case_description}"
-        
-        Retrieved Historical Precedents:
-        {historical_cases_raw}
-        
-        Task:
-        Filter the historical precedents. Return ONLY the relevant historical cases along with a brief reason for their relevance. If none are relevant, return "No strictly relevant precedents established."
-        """
+        # --- END-TO-END HISTORICAL CASE RETRIEVAL AGENT ---
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_historical_cases",
+                    "description": "Searches the historical case vector database for cases matching the query.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query. For better results, describe the crime type, specific facts, and relevant legal keywords (e.g. 'theft, stolen mobile phone, section 378').",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            }
+        ]
 
-        verification_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": verification_prompt}],
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,
-            max_tokens=1500,
-        )
+        system_msg = """You are an end-to-end autonomous Precedent Retrieval Agent. 
+Your goal is to find 3-5 HIGHLY RELEVANT historical case precedents that establish standard rulings for a given case description and Charge Sheet.
 
-        historical_cases_context = verification_completion.choices[0].message.content
+STEPS YOU MUST FOLLOW:
+1. Carefully analyze the facts of the case description AND the sections of law applied in the Charge Sheet.
+2. Call the `search_historical_cases` tool with a highly specific query containing the exact Section Numbers applied and key facts (e.g., 'Section 392 IPC robbery gold chain').
+3. Read the fetched historical cases. Verify if they match the core facts and nature of the current case, particularly matching the sections of law.
+4. CRITICAL: If they do NOT match (e.g. you searched for theft but got a bus accident or dowry case), YOU MUST reject them.
+5. If your initial queries fail to bring back relevant cases, formulate BROADER queries. Search for the root legal terms rather than ultra-specific facts (e.g. use "robbery Section 392" or "theft Section 378" instead of "snatching gold chain from a person on a bike").
+6. Once you have fetched truly relevant historical cases, output the final list of the relevant cases and provide a 1-sentence reasoning for why they establish precedent for the case at hand.
+If none are relevant after 4 tries, return "No strictly relevant precedents established."
+Do not include conversational filler in your final output.
+"""
+        messages = [
+            {"role": "system", "content": system_msg},
+            {
+                "role": "user",
+                "content": f"Case Description: {request.case_description}\n\nCharge Sheet Content (Read for Sections): {request.charge_sheet_content}",
+            },
+        ]
+
+        historical_cases_context = ""
+        max_iterations = 4
+        for i in range(max_iterations):
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.1,
+                max_tokens=2000,
+            )
+
+            response_message = response.choices[0].message
+
+            message_dict = {"role": "assistant"}
+            if response_message.content:
+                message_dict["content"] = response_message.content
+            if response_message.tool_calls:
+                message_dict["tool_calls"] = [
+                    {
+                        "id": tool.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool.function.name,
+                            "arguments": tool.function.arguments,
+                        },
+                    }
+                    for tool in response_message.tool_calls
+                ]
+            messages.append(message_dict)
+
+            # Execute tool calls if any
+            if response_message.tool_calls:
+                for tool_call in response_message.tool_calls:
+                    if tool_call.function.name == "search_historical_cases":
+                        try:
+                            args = json.loads(tool_call.function.arguments)
+                            query = args.get("query", request.case_description)
+                        except:
+                            query = request.case_description
+
+                        print(f"Agent searching Cases DB with query: {query}")
+                        search_results = get_relevant_cases(query, limit=5)
+
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "name": tool_call.function.name,
+                                "content": search_results
+                                or "No results found. Try a different query.",
+                            }
+                        )
+            else:
+                historical_cases_context = response_message.content
+                break
+        else:
+            if messages[-1].get("content"):
+                historical_cases_context = messages[-1]["content"]
+            else:
+                historical_cases_context = (
+                    "No strictly relevant precedents established."
+                )
+
+        print(f"Historical Cases Agent Output Length: {len(historical_cases_context)}")
+
         system_prompt = f"""You are a highly experienced Indian Judge.
         
         Your task is to review the Charge Sheet and Case Description and predict the most likely legal verdict based on the Indian Penal Code (IPC) and CrPC.
         
-        To guide your judgment and to remain consistent with established precedent, here are some historical case rulings similar to this one:
+        To guide your judgment and to remain strictly consistent with established precedent, here are some historical case rulings similar to this one:
         <HISTORICAL_PRECEDENTS>
         {historical_cases_context}
         </HISTORICAL_PRECEDENTS>
@@ -392,6 +474,8 @@ async def predict_verdict(request: VerdictRequest):
            - Jail Term (Years/Months)
            - Fine Amount (in INR)
            - Rationale (Brief legal reasoning comparing facts to precedents if applicable)
+        
+        CRITICAL INSTRUCTION FOR CONSISTENCY: If the case at hand has the exact same severity and matching facts/sections as one of the Historical Precedents, YOU MUST give the exact same Jail Term and Fine as that historical case. Do not deviate from the precedent's punishment unless there are clear aggravating or mitigating circumstances.
         
         Output format must be valid JSON:
         {{
