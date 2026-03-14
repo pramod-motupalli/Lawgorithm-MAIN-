@@ -9,6 +9,8 @@ const VerdictDisplay = ({ verdictData }) => {
         punishment_type,
         jail_term,
         fine_amount,
+        rehab_details,
+        counseling_details,
         legal_rationale,
     } = verdictData;
 
@@ -55,32 +57,56 @@ const VerdictDisplay = ({ verdictData }) => {
 
             {/* Content */}
             <div className="p-6 space-y-6">
-                {/* Punishment Section */}
-                {isGuilty && (
+                {/* Details Section (Shows for both criminal and civil) */}
+                {(jail_term !== "None" || fine_amount !== "None" || (rehab_details && rehab_details !== "None") || (counseling_details && counseling_details !== "None")) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                Jail Term
-                            </h3>
-                            <p className="text-lg font-bold text-gray-900">
-                                {jail_term || "None"}
-                            </p>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                Fine Amount
-                            </h3>
-                            <p className="text-lg font-bold text-gray-900">
-                                {fine_amount || "None"}
-                            </p>
-                        </div>
+                        {jail_term && jail_term !== "None" && (
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    Jail Term
+                                </h3>
+                                <p className="text-lg font-bold text-gray-900">
+                                    {jail_term}
+                                </p>
+                            </div>
+                        )}
+                        {fine_amount && fine_amount !== "None" && (
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    Fine Amount
+                                </h3>
+                                <p className="text-lg font-bold text-gray-900">
+                                    {fine_amount}
+                                </p>
+                            </div>
+                        )}
+                        {rehab_details && rehab_details !== "None" && (
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                                <h3 className="text-sm font-semibold text-purple-600 uppercase tracking-wider mb-1">
+                                    Rehabilitation
+                                </h3>
+                                <p className="text-gray-900 font-medium">
+                                    {rehab_details}
+                                </p>
+                            </div>
+                        )}
+                        {counseling_details && counseling_details !== "None" && (
+                            <div className="bg-teal-50 p-4 rounded-lg border border-teal-100">
+                                <h3 className="text-sm font-semibold text-teal-600 uppercase tracking-wider mb-1">
+                                    Counseling
+                                </h3>
+                                <p className="text-gray-900 font-medium">
+                                    {counseling_details}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* Rationale Section */}
                 <div className="bg-blue-50/50 p-5 rounded-lg border border-blue-100">
                     <div className="flex items-start gap-3">
-                        <ShieldAlert className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                        <ShieldAlert className="w-5 h-5 text-blue-600 mt-1 shrink-0" />
                         <div>
                             <h3 className="text-sm font-bold text-blue-800 mb-2">
                                 Legal Rationale

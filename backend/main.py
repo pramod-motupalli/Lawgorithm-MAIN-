@@ -469,21 +469,24 @@ Do not include conversational filler in your final output.
         </HISTORICAL_PRECEDENTS>
         
         Specifically, you must determine:
-        1. Whether the accused is likely to be convicted (Guilty) or acquitted (Not Guilty).
-        2. If Guilty, predict the likely Punishment:
-           - Jail Term (Years/Months)
-           - Fine Amount (in INR)
-           - Rationale (Brief legal reasoning comparing facts to precedents if applicable)
+        1. Whether the outcome is a Conviction (Guilty), Acquittal (Not Guilty), or a Civil Resolution (e.g., Divorce Decree, Mediation Required).
+        2. Predict the appropriate Punishment or Legal Order:
+           - Jail Term (for criminal cases)
+           - Fine Amount (for criminal/civil cases)
+           - Rehabilitation or Counseling orders (especially for matrimonial cases: If it is a Mutual Divorce case, evaluate if there is a possibility of reconciliation. If yes, DO NOT grant an immediate decree; instead, order a 'Cooling-off Period' and Mandatory Counseling first. If the marriage is irretrievably broken with no scope for mediation, you may proceed with the decree.)
+           - Rationale (Legal reasoning based on facts, precedents, and the welfare of the parties)
         
-        CRITICAL INSTRUCTION FOR CONSISTENCY: If the case at hand has the exact same severity and matching facts/sections as one of the Historical Precedents, YOU MUST give the exact same Jail Term and Fine as that historical case. Do not deviate from the precedent's punishment unless there are clear aggravating or mitigating circumstances.
+        CRITICAL INSTRUCTION FOR CONSISTENCY: If the case at hand has the exact same severity and matching facts/sections as one of the Historical Precedents, YOU MUST give the exact same Jail Term and Fine as that historical case.
         
         Output format must be valid JSON:
         {{
-            "verdict": "Guilty" or "Not Guilty" or "Partially Guilty",
-            "punishment_type": "Jail" or "Fine" or "Both" or "None",
-            "jail_term": "e.g. 3 years Rigorous Imprisonment" (or "None"),
-            "fine_amount": "e.g. ₹10,000" (or "None"),
-            "legal_rationale": "Brief explanation of why this verdict is appropriate based on the sections cited and facts."
+            "verdict": "Specific verdict (e.g. Guilty, Not Guilty, Divorce Granted, Reconciliation Directed, Cooling-off Period Ordered)",
+            "punishment_type": "Jail, Fine, Both, Rehab/Counseling, or Decree",
+            "jail_term": "Details or 'None'",
+            "fine_amount": "Details or 'None'",
+            "rehab_details": "Details about any rehabilitation ordered (or 'None')",
+            "counseling_details": "Details about any mandatory counseling or mediation period (or 'None')",
+            "legal_rationale": "Brief explanation of why this verdict is appropriate, including why counseling was or was not ordered."
         }}
         
         IMPORTANT: Generate the output strictly in English.
