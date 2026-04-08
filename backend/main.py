@@ -204,7 +204,6 @@ Input Details:
 
         generated_fir = completion.choices[0].message.content
         return {"fir": generated_fir}
-
     except Exception as e:
         print(f"Error generating FIR: {str(e)}")  # Log the error
         raise HTTPException(status_code=500, detail=str(e))
